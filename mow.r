@@ -6,9 +6,9 @@ library("rpart")
 frame_files <- lapply(sys.frames(), function(x) x$ofile)
 frame_files <- Filter(Negate(is.null), frame_files)
 PATH <- dirname(frame_files[[length(frame_files)]])
-breastPath = paste(PATH,"/breast.csv",sep="")
-winePath = paste(PATH,"/wine.csv",sep="")
-irisPath = paste(PATH,"/iris.csv",sep="")
+breastPath = paste("C:/currentProjects/mow/mow2014l/breast.csv",sep="")
+winePath = paste("C:/currentProjects/mow/mow2014l/wine.csv",sep="")
+irisPath = paste("C:/currentProjects/mow/mow2014l/iris.csv",sep="")
 
 gdata=0
 gcol=0
@@ -107,8 +107,13 @@ callMethod = function(method,indata,colName,vect){
 }
 
 selectBest = function(neigh,indata,method,colName) {
-  bestVector = 0
+  bestVector = c()
   bestScore = 0
+  neighsize = 
+  if(ncol(neigh)<1)
+  {
+       return(list(bestVector,bestScore))
+  }
   for(i in 1:ncol(neigh))
   {
     vect = neigh[,i]
@@ -134,13 +139,17 @@ SVM = function(data,colName){
   quality
 }
 
-NB = function(data,colName){
+NB = function(mdata,colName){
   formul = as.formula(paste(colName,"~."))
-  colNumber = match(colName,colnames(data))
-  model = NaiveBayes(formul,data)
-  zmienna=predict(model, data[-colNumber])$class
+  colNumber = match(colName,colnames(mdata))
+  #f= NaiveBayes.formula
+  dropped = mdata[,colName,drop=TRUE]
+  droppedFactor = as.factor(dropped)
+  model = NaiveBayes(x=mdata,grouping=droppedFactor)
+  #What a shit model = NaiveBayes(formul,mdata)
+  zmienna=predict(model, mdata[-colNumber])$class
   tryCatch({zmienna=round(zmienna)},error=function(e){})
-  quality=sum(as.integer(data[,colNumber]==zmienna))/dim(data)[1]
+  quality=sum(as.integer(mdata[,colNumber]==zmienna))/dim(mdata)[1]
   quality
 }
 
@@ -185,8 +194,10 @@ RW = function(indata,colName,atrCount,iterCount, method){
 
 VNS = function(indata,colName,atrCount,maxDist, method){
   column = indata[colName]
-  best=0
+  
   bestvect = randomVector(ncol(indata)-1,atrCount)
+  best= callMethod(method,indata,colName,bestvect)
+  
     
   stop = FALSE
   while(!stop)
