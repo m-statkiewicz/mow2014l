@@ -10,9 +10,6 @@ breastPath = paste(PATH,"/breast.csv",sep="")
 winePath = paste(PATH,"/wine.csv",sep="")
 irisPath = paste(PATH,"/iris.csv",sep="")
 
-gdata=0
-gcol=0
-
 readCsvData = function(filepath,colname="",colnr=0){
   isHeader = !colname==""
   data = read.csv(filepath, header=isHeader) 
@@ -47,7 +44,7 @@ splitDataset = function (mydata, percent){
   smp_size <- floor(percent * nrow(mydata))
   
   ## set the seed to make your partition reproductible
-  ## set.seed(123)
+  set.seed(123)
   train_ind <- sample(seq_len(nrow(mydata)), size = smp_size)
   
   train <- mydata[train_ind, ]
@@ -76,7 +73,7 @@ appendColumn = function (data,column){
 }
 
 selectRandom = function(vecTable){
-  rand = sample(1:(dim(vecTable)[2]),1)
+  rand = sample(1:ncol(vecTable),1)
   vecTable[,rand]
 }
 
@@ -199,7 +196,7 @@ MC = function(indata,colName,atrCount,iterCount, method){
 }
 
 RW = function(indata,colName,atrCount,iterCount, method){
-  best=0
+  best=-1
   vect = randomVector(ncol(indata)-1,atrCount)
   for (i in 1:iterCount) {
     qual=callMethod(method,indata,colName,vect) 
@@ -207,7 +204,11 @@ RW = function(indata,colName,atrCount,iterCount, method){
       best=qual
       bestvect=vect
     }
-    vect = selectRandom(generateNeighbours(vect,2))
+    neigh = generateNeighbours(vect,2)
+    if (length(neigh) == 0) {
+        break
+    }
+    vect = selectRandom(neigh)
   }
   list(bestvect,best)
 }
@@ -254,11 +255,13 @@ MOW = function (datacsv,method,strategy,strategyParam){
   
   quality=c()
   atrCount=c()
-  for(i in 1:(ncol(workdata)-1)) {
+  for(i in 1:(ncol(workdata)-1)) { #-1 for
+    print(i)
     wd=workdata
     result = strategy(wd,colName,i,strategyParam,method)
     atrCount=append(atrCount,i)
     quality=append(quality,result[[2]])
+    print(result[[2]])
   }
   margin = 0.1*(max(quality)-min(quality))
   print((quality))
@@ -271,17 +274,14 @@ dataWCSV = readCsvData(winePath,"Alcohol")
 dataICSV = readCsvData(irisPath,"Species")
 dataBCSV = readCsvData(breastPath,colnr=2)
 
-#print(RW(workdata,colName,3,10,NB))
-#print(MMC(workdata,colName,2,10,DT))
-#print(VNS(workdata,colName,2,6,DT))
 
 testD = function(method,strategy,strategyParam) {
    print("Iris:")
    MOW(dataICSV,method,strategy,strategyParam)
    print("Wine:")
    MOW(dataWCSV,method,strategy,strategyParam)
-   print("Breast:")
-   MOW(dataBCSV,method,strategy,strategyParam)
+   #print("Breast:")
+   #MOW(dataBCSV,method,strategy,strategyParam)
 }
 
 testDM = function(strategy,strategyParam) {
