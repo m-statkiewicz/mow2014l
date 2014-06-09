@@ -6,9 +6,9 @@ library("rpart")
 frame_files <- lapply(sys.frames(), function(x) x$ofile)
 frame_files <- Filter(Negate(is.null), frame_files)
 PATH <- dirname(frame_files[[length(frame_files)]])
-breastPath = paste("C:/currentProjects/mow/mow2014l/breast.csv",sep="")
-winePath = paste("C:/currentProjects/mow/mow2014l/wine.csv",sep="")
-irisPath = paste("C:/currentProjects/mow/mow2014l/iris.csv",sep="")
+breastPath = paste(PATH,"/breast.csv",sep="")
+winePath = paste(PATH,"/wine.csv",sep="")
+irisPath = paste(PATH,"/iris.csv",sep="")
 
 gdata=0
 gcol=0
@@ -41,6 +41,18 @@ columnsToClusterNatural <- function (myvec){
     colnum = colnum + 1
   }
   returnvec
+}
+
+splitDataset = function (mydata, percent){
+  smp_size <- floor(percent * nrow(mydata))
+  
+  ## set the seed to make your partition reproductible
+  ## set.seed(123)
+  train_ind <- sample(seq_len(nrow(mydata)), size = smp_size)
+  
+  train <- mydata[train_ind, ]
+  test <- mydata[-train_ind, ]
+  list("train"=train,"test"=test)
 }
 
 #input: data, vec01
@@ -129,13 +141,14 @@ selectBest = function(neigh,indata,method,colName) {
 
 #-----------score functions-----------
 
-SVM = function(data,colName){
+SVM = function(mdata,colName){
   formul = as.formula(paste(colName,"~."))
-  colNumber = match(colName,colnames(data))
-  model = svm(formul, data)
-  zmienna=predict(model, data[-colNumber])
+  colNumber = match(colName,colnames(mdata))
+  splitdata = splitDataset(mdata,0.75)
+  model = svm(formul, splitdata$train)
+  zmienna=predict(model, splitdata$test[-colNumber])
   tryCatch({zmienna=round(zmienna)},error=function(e){})
-  quality=sum(as.integer(data[,colNumber]==zmienna))/dim(data)[1]
+  quality=sum(as.integer(splitdata$test[,colNumber]==zmienna))/nrow(splitdata$test)
   quality
 }
 
@@ -143,29 +156,36 @@ NB = function(mdata,colName){
   formul = as.formula(paste(colName,"~."))
   colNumber = match(colName,colnames(mdata))
   #f= NaiveBayes.formula
-  dropped = mdata[,colName,drop=TRUE]
+  splitdata = splitDataset(mdata,0.75)
+  dropped = splitdata$train[,colName,drop=TRUE]
   droppedFactor = as.factor(dropped)
-  model = NaiveBayes(x=mdata,grouping=droppedFactor)
-  #What a shit model = NaiveBayes(formul,mdata)
-  zmienna=predict(model, mdata[-colNumber])$class
+  model = NaiveBayes(x=splitdata$train[-colNumber],grouping=droppedFactor)
+  zmienna=predict(model, splitdata$test[-colNumber])$class
   tryCatch({zmienna=round(zmienna)},error=function(e){})
-  quality=sum(as.integer(mdata[,colNumber]==zmienna))/dim(mdata)[1]
+  quality=sum(as.integer(splitdata$test[,colNumber]==zmienna))/nrow(splitdata$test)
   quality
 }
 
-DT = function(data,colName){
+DT = function(mdata,colName){
   formul = as.formula(paste(colName,"~."))
-  colNumber = match(colName,colnames(data))
-  model = rpart(formul,data)
-  zmienna=predict(model,type = "class")
-  tryCatch({zmienna=round(zmienna)},error=function(e){})
-  quality=sum(as.integer(data[,colNumber]==zmienna))/dim(data)[1]
+  colNumber = match(colName,colnames(mdata))
+  splitdata = splitDataset(mdata,0.75)
+  model = rpart(formul,splitdata$train)
+  zmienna=predict(model,splitdata$test)
+  tryCatch(
+      {
+          zmienna = colnames(zmienna)[apply(zmienna,1,which.max)]
+      },
+      error=function(e){
+          zmienna=round(zmienna)
+      })
+  quality=sum(as.integer(splitdata$test[,colNumber]==zmienna))/nrow(splitdata$test)
   quality
 }
 
 #-----------optimization functions-----------
 
-MMC = function(indata,colName,atrCount,iterCount, method){
+MC = function(indata,colName,atrCount,iterCount, method){
   best=-1
   for (i in 1:iterCount) {
     vect = randomVector(ncol(indata)-1,atrCount)
@@ -242,7 +262,6 @@ MOW = function (datacsv,method,strategy,strategyParam){
   }
   margin = 0.1*(max(quality)-min(quality))
   print((quality))
-  print(min(quality))
   plot(atrCount,quality,
        ylim=c(min(quality),max(quality))) 
 }
@@ -255,3 +274,22 @@ dataBCSV = readCsvData(breastPath,colnr=2)
 #print(RW(workdata,colName,3,10,NB))
 #print(MMC(workdata,colName,2,10,DT))
 #print(VNS(workdata,colName,2,6,DT))
+
+testD = function(method,strategy,strategyParam) {
+   print("Iris:")
+   MOW(dataICSV,method,strategy,strategyParam)
+   print("Wine:")
+   MOW(dataWCSV,method,strategy,strategyParam)
+   print("Breast:")
+   MOW(dataBCSV,method,strategy,strategyParam)
+}
+
+testDM = function(strategy,strategyParam) {
+  print("DT:")
+  testD(DT,strategy,strategyParam)
+  print("NB:")
+  testD(NB,strategy,strategyParam)
+  print("SVM:")
+  testD(SVM,strategy,strategyParam)
+}
+
