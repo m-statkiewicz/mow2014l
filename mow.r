@@ -190,7 +190,7 @@ RW = function(indata,testdata,colName,atrCount,iterCount, method){
   best=-1
   vect = randomVector(ncol(indata)-1,atrCount)
   for (i in 1:iterCount) {
-    qual=callMethod(method,indata,colName,vect) 
+    qual=callMethod(method,indata,testdata,colName,vect) 
     if (qual>best){
       best=qual
       bestvect=vect
@@ -295,10 +295,10 @@ MOW = function (datacsv,method,strategy,strategyParam){
 }
 
 testD = function(method,strategy,strategyParam) {
-  print("Wine:")
-  MOW(dataWCSV,method,strategy,strategyParam)
-   print("Iris:")
-   MOW(dataICSV,method,strategy,strategyParam)
+ # print("Wine:")
+#  MOW(dataWCSV,method,strategy,strategyParam)
+ #  print("Iris:")
+  # MOW(dataICSV,method,strategy,strategyParam)
    print("Breast:")
    MOW(dataBCSV,method,strategy,strategyParam)
 }
