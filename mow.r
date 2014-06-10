@@ -2,26 +2,6 @@ library("e1071")
 library("klaR")
 library("rpart")
 
-# prepare data to read from csv files
-frame_files <- lapply(sys.frames(), function(x) x$ofile)
-frame_files <- Filter(Negate(is.null), frame_files)
-PATH <- dirname(frame_files[[length(frame_files)]])
-breastPath = paste(PATH,"/breast.csv",sep="")
-winePath = paste(PATH,"/wine.csv",sep="")
-irisPath = paste(PATH,"/iris.csv",sep="")
-
-readCsvData = function(filepath,colname="",colnr=0){
-  isHeader = !colname==""
-  data = read.csv(filepath, header=isHeader) 
-  if (isHeader) {
-    colnr = match(colname,colnames(data))
-  } else {
-    colname =  colnames(data)[colnr]
-  }
-  
-  list(data,colnr,colname)
-}
-
 #-----------utils functions-----------
 
 #vec01 = vector of {0;1}
@@ -44,7 +24,6 @@ splitDataset = function (mydata, percent){
   smp_size <- floor(percent * nrow(mydata))
   
   ## set the seed to make your partition reproductible
-  set.seed(123)
   train_ind <- sample(seq_len(nrow(mydata)), size = smp_size)
   
   train <- mydata[train_ind, ]
@@ -107,95 +86,107 @@ randomVector = function(dim, atrCount){
   vect
 }
 
-callMethod = function(method,indata,colName,vect){
+callMethod = function(method,indata,testdata,colName,vect){
   column = indata[colName]
+  columntest = testdata[colName]
+  
   workdata=deleteColumnByName(indata,colName)
+  worktestdata=deleteColumnByName(testdata,colName)
+  
   workdata = extractCols(workdata,vect)
+  worktestdata=extractCols(worktestdata,vect)
+  
   workdata = appendColumn(workdata,column)
-  method(workdata,colName) 
+  worktestdata=appendColumn(worktestdata,columntest)
+  
+  method(workdata,worktestdata,colName) 
 }
 
-selectBest = function(neigh,indata,method,colName) {
+selectBest = function(neigh,indata,testdata,method,colName) {
   bestVector = c()
   bestScore = 0
   neighsize = 
   if(ncol(neigh)<1)
   {
-       return(list(bestVector,bestScore))
+       return(list("bestVector"=bestVector,"bestScore"=bestScore))
   }
   for(i in 1:ncol(neigh))
   {
     vect = neigh[,i]
-    score = callMethod(method,indata,colName,vect)
+    score = callMethod(method,indata,testdata,colName,vect)
     if(score > bestScore)
     {   
       bestScore = score
       bestVector = vect
     }        
   }
-  list(bestVector,bestScore)
+  list("bestVector"=bestVector,"bestScore"=bestScore)
 }
 
 #-----------score functions-----------
 
-SVM = function(mdata,colName){
+SVM = function(mdata,testdata,colName){
   formul = as.formula(paste(colName,"~."))
   colNumber = match(colName,colnames(mdata))
-  splitdata = splitDataset(mdata,0.75)
-  model = svm(formul, splitdata$train)
-  zmienna=predict(model, splitdata$test[-colNumber])
+  model = svm(formul, mdata)
+  zmienna=predict(model, testdata[-colNumber])
   tryCatch({zmienna=round(zmienna)},error=function(e){})
-  quality=sum(as.integer(splitdata$test[,colNumber]==zmienna))/nrow(splitdata$test)
+  quality=sum(as.integer(testdata[,colNumber]==zmienna))/nrow(testdata)
   quality
 }
 
-NB = function(mdata,colName){
+NB = function(mdata,testdata,colName){
   formul = as.formula(paste(colName,"~."))
   colNumber = match(colName,colnames(mdata))
   #f= NaiveBayes.formula
-  splitdata = splitDataset(mdata,0.75)
-  dropped = splitdata$train[,colName,drop=TRUE]
+  dropped = mdata[,colName,drop=TRUE]
   droppedFactor = as.factor(dropped)
-  model = NaiveBayes(x=splitdata$train[-colNumber],grouping=droppedFactor)
-  zmienna=predict(model, splitdata$test[-colNumber])$class
+  model = NaiveBayes(x=mdata[-colNumber],grouping=droppedFactor)
+  zmienna=predict(model, testdata[-colNumber])$class
   tryCatch({zmienna=round(zmienna)},error=function(e){})
-  quality=sum(as.integer(splitdata$test[,colNumber]==zmienna))/nrow(splitdata$test)
+  quality=sum(as.integer(testdata[,colNumber]==zmienna))/nrow(testdata)
   quality
 }
 
-DT = function(mdata,colName){
+DT = function(mdata,testdata,colName){
   formul = as.formula(paste(colName,"~."))
   colNumber = match(colName,colnames(mdata))
-  splitdata = splitDataset(mdata,0.75)
-  model = rpart(formul,splitdata$train)
-  zmienna=predict(model,splitdata$test)
+  model = rpart(formul,mdata)
+  zmienna=predict(model,testdata)
   tryCatch(
       {
           zmienna = colnames(zmienna)[apply(zmienna,1,which.max)]
+          
       },
       error=function(e){
-          zmienna=round(zmienna)
       })
-  quality=sum(as.integer(splitdata$test[,colNumber]==zmienna))/nrow(splitdata$test)
+  tryCatch(
+  {
+    zmienna=round(zmienna)
+  },
+  error=function(e){
+  })
+  
+  quality=sum(as.integer(testdata[,colNumber]==zmienna))/nrow(testdata)
   quality
 }
 
 #-----------optimization functions-----------
 
-MC = function(indata,colName,atrCount,iterCount, method){
+MC = function(indata,testdata,colName,atrCount,iterCount, method){
   best=-1
   for (i in 1:iterCount) {
     vect = randomVector(ncol(indata)-1,atrCount)
-    qual=callMethod(method,indata,colName,vect)
+    qual=callMethod(method,indata,testdata,colName,vect)
     if (qual>best){
       best=qual
       bestvect=vect
     }
   }
-  list(bestvect,best)
+  list("bestVector"=bestvect,"bestScore"=best)
 }
 
-RW = function(indata,colName,atrCount,iterCount, method){
+RW = function(indata,testdata,colName,atrCount,iterCount, method){
   best=-1
   vect = randomVector(ncol(indata)-1,atrCount)
   for (i in 1:iterCount) {
@@ -210,14 +201,14 @@ RW = function(indata,colName,atrCount,iterCount, method){
     }
     vect = selectRandom(neigh)
   }
-  list(bestvect,best)
+  list("bestVector"=bestvect,"bestScore"=best)
 }
 
-VNS = function(indata,colName,atrCount,maxDist, method){
+VNS = function(indata,testdata,colName,atrCount,maxDist, method){
   column = indata[colName]
   
   bestvect = randomVector(ncol(indata)-1,atrCount)
-  best= callMethod(method,indata,colName,bestvect)
+  best= callMethod(method,indata,testdata,colName,bestvect)
   
     
   stop = FALSE
@@ -226,11 +217,11 @@ VNS = function(indata,colName,atrCount,maxDist, method){
     k = 2
     repeat{
       neigh = generateNeighbours(bestvect,k)
-      yList = selectBest(neigh,indata,method,colName) #TODO
-      yvect = yList[[1]]
-      ybest = yList[[2]]
+      yList = selectBest(neigh,indata,testdata,method,colName) #TODO
+      yvect = yList$bestVector
+      ybest = yList$bestScore
       #until
-      if(ybest > best) #save found solution and start with with k = 1
+      if(ybest > best) #save found solution and start with with k = 2
       {
         best=ybest
         bestvect=yvect
@@ -245,8 +236,36 @@ VNS = function(indata,colName,atrCount,maxDist, method){
       }
     }
   }
-  list(bestvect,best)
+  list("bestVector"=bestvect,"bestScore"=best)
 }
+
+## Reading data 
+
+frame_files <- lapply(sys.frames(), function(x) x$ofile)
+frame_files <- Filter(Negate(is.null), frame_files)
+PATH <- dirname(frame_files[[length(frame_files)]])
+breastPath = paste(PATH,"/breast.csv",sep="")
+winePath = paste(PATH,"/wine.csv",sep="")
+irisPath = paste(PATH,"/iris.csv",sep="")
+
+readCsvData = function(filepath,colname="",colnr=0){
+  isHeader = !colname==""
+  data = read.csv(filepath, header=isHeader) 
+  if (isHeader) {
+    colnr = match(colname,colnames(data))
+  } else {
+    colname =  colnames(data)[colnr]
+  }
+  
+  list(data,colnr,colname)
+}
+
+dataWCSV = readCsvData(winePath,"Alcohol")
+dataICSV = readCsvData(irisPath,"Species")
+dataBCSV = readCsvData(breastPath,colnr=2)
+
+
+##tests
 
 MOW = function (datacsv,method,strategy,strategyParam){
   workdata = datacsv[[1]]
@@ -255,13 +274,19 @@ MOW = function (datacsv,method,strategy,strategyParam){
   
   quality=c()
   atrCount=c()
+  
+  set.seed(1234)
+  #split data
+  splitdata = splitDataset(workdata,0.80) 
+  indata = splitdata$train
+  testdata = splitdata$test
+  
   for(i in 1:(ncol(workdata)-1)) { #-1 for
     print(i)
-    wd=workdata
-    result = strategy(wd,colName,i,strategyParam,method)
+    result = strategy(indata,testdata,colName,i,strategyParam,method)
     atrCount=append(atrCount,i)
-    quality=append(quality,result[[2]])
-    print(result[[2]])
+    quality=append(quality,result$bestScore)
+    print(result$bestScore)
   }
   margin = 0.1*(max(quality)-min(quality))
   print((quality))
@@ -269,19 +294,13 @@ MOW = function (datacsv,method,strategy,strategyParam){
        ylim=c(min(quality),max(quality))) 
 }
 
-
-dataWCSV = readCsvData(winePath,"Alcohol")
-dataICSV = readCsvData(irisPath,"Species")
-dataBCSV = readCsvData(breastPath,colnr=2)
-
-
 testD = function(method,strategy,strategyParam) {
+  print("Wine:")
+  MOW(dataWCSV,method,strategy,strategyParam)
    print("Iris:")
    MOW(dataICSV,method,strategy,strategyParam)
-   print("Wine:")
-   MOW(dataWCSV,method,strategy,strategyParam)
-   #print("Breast:")
-   #MOW(dataBCSV,method,strategy,strategyParam)
+   print("Breast:")
+   MOW(dataBCSV,method,strategy,strategyParam)
 }
 
 testDM = function(strategy,strategyParam) {
